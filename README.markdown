@@ -9,6 +9,16 @@ This version updated by Chris Adol to use netcore1.1 and async.
 
 This version is available on NuGet as SnowMakerCore: [http://nuget.org/List/Packages/SnowMakerCore](http://nuget.org/List/Packages/SnowMakerCore)
 
+Usage should be something like this (different to the original usage):
+```csharp
+     const string containerName = "snowmakerKeys";
+     var dataStore = await BlobOptimisticDataStore.CreateAsync(cloudStorageAccount, containerName);
+     var generator = new UniqueIdGenerator(dataStore);
+     var orderNumber = await generator.NextIdAsync("orderNumbers");
+```
+
+This version is NOT affiliated to the original authors so please do not ask them for help with this version.
+
 Documented at [http://blog.tatham.oddie.com.au/2011/07/14/released-snowmaker-a-unique-id-generator-for-azure-or-any-other-cloud-hosting-environment/](http://blog.tatham.oddie.com.au/2011/07/14/released-snowmaker-a-unique-id-generator-for-azure-or-any-other-cloud-hosting-environment/)
 
 Heavily inspired by, and some code copied from [http://msdn.microsoft.com/en-us/magazine/gg309174.aspx](http://msdn.microsoft.com/en-us/magazine/gg309174.aspx)
