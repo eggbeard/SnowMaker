@@ -2,6 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>SnowMakerCore</PackageId>
+    <Description>netcore1.1 version of SnowMaker</Description>
+    <Authors>Tatham Oddie, Chris Adol</Authors>
+    <PackageLicenseUrl>https://github.com/chrisadol/SnowMaker/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/chrisadol/SnowMaker/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/chrisadol/SnowMaker/</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
