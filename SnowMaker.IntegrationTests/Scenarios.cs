@@ -1,28 +1,28 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using SnowMaker;
 
-namespace IntegrationTests.cs
+namespace SnowMaker.IntegrationTests
 {
     public abstract class Scenarios<TTestScope> where TTestScope : ITestScope
     {
-        protected abstract IOptimisticDataStore BuildStore(TTestScope scope);
+        protected abstract Task<IOptimisticDataStore> BuildStoreAsync(TTestScope scope);
         protected abstract TTestScope BuildTestScope();
 
         [Test]
-        public void ShouldReturnOneForFirstIdInNewScope()
+        public async Task ShouldReturnOneForFirstIdInNewScope()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store = BuildStore(testScope);
+                var store = await BuildStoreAsync(testScope);
                 var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
 
                 // Act
-                var generatedId = generator.NextId(testScope.IdScopeName);
+                var generatedId = await generator.NextIdAsync(testScope.IdScopeName);
 
                 // Assert
                 Assert.AreEqual(1, generatedId);
@@ -30,78 +30,78 @@ namespace IntegrationTests.cs
         }
 
         [Test]
-        public void ShouldInitializeBlobForFirstIdInNewScope()
+        public async Task ShouldInitializeBlobForFirstIdInNewScope()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store = BuildStore(testScope);
+                var store = await BuildStoreAsync(testScope);
                 var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
 
                 // Act
-                generator.NextId(testScope.IdScopeName); //1
+                await generator.NextIdAsync(testScope.IdScopeName); //1
 
                 // Assert
-                Assert.AreEqual("4", testScope.ReadCurrentPersistedValue());
+                Assert.AreEqual("4", await testScope.ReadCurrentPersistedValueAsync());
             }
         }
 
         [Test]
-        public void ShouldNotUpdateBlobAtEndOfBatch()
+        public async Task ShouldNotUpdateBlobAtEndOfBatch()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store = BuildStore(testScope);
+                var store = await BuildStoreAsync(testScope);
                 var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
 
                 // Act
-                generator.NextId(testScope.IdScopeName); //1
-                generator.NextId(testScope.IdScopeName); //2
-                generator.NextId(testScope.IdScopeName); //3
+                await generator.NextIdAsync(testScope.IdScopeName); //1
+                await generator.NextIdAsync(testScope.IdScopeName); //2
+                await generator.NextIdAsync(testScope.IdScopeName); //3
 
                 // Assert
-                Assert.AreEqual("4", testScope.ReadCurrentPersistedValue());
+                Assert.AreEqual("4", await testScope.ReadCurrentPersistedValueAsync());
             }
         }
 
         [Test]
-        public void ShouldUpdateBlobWhenGeneratingNextIdAfterEndOfBatch()
+        public async Task ShouldUpdateBlobWhenGeneratingNextIdAfterEndOfBatch()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store = BuildStore(testScope);
+                var store = await BuildStoreAsync(testScope);
                 var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
 
                 // Act
-                generator.NextId(testScope.IdScopeName); //1
-                generator.NextId(testScope.IdScopeName); //2
-                generator.NextId(testScope.IdScopeName); //3
-                generator.NextId(testScope.IdScopeName); //4
+                await generator.NextIdAsync(testScope.IdScopeName); //1
+                await generator.NextIdAsync(testScope.IdScopeName); //2
+                await generator.NextIdAsync(testScope.IdScopeName); //3
+                await generator.NextIdAsync(testScope.IdScopeName); //4
 
                 // Assert
-                Assert.AreEqual("7", testScope.ReadCurrentPersistedValue());
+                Assert.AreEqual("7", await testScope.ReadCurrentPersistedValueAsync());
             }
         }
 
         [Test]
-        public void ShouldReturnIdsFromThirdBatchIfSecondBatchTakenByAnotherGenerator()
+        public async Task ShouldReturnIdsFromThirdBatchIfSecondBatchTakenByAnotherGenerator()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store1 = BuildStore(testScope);
+                var store1 = await BuildStoreAsync(testScope);
                 var generator1 = new UniqueIdGenerator(store1) { BatchSize = 3 };
-                var store2 = BuildStore(testScope);
+                var store2 = await BuildStoreAsync(testScope);
                 var generator2 = new UniqueIdGenerator(store2) { BatchSize = 3 };
 
                 // Act
-                generator1.NextId(testScope.IdScopeName); //1
-                generator1.NextId(testScope.IdScopeName); //2
-                generator1.NextId(testScope.IdScopeName); //3
-                generator2.NextId(testScope.IdScopeName); //4
-                var lastId = generator1.NextId(testScope.IdScopeName); //7
+                await generator1.NextIdAsync(testScope.IdScopeName); //1
+                await generator1.NextIdAsync(testScope.IdScopeName); //2
+                await generator1.NextIdAsync(testScope.IdScopeName); //3
+                await generator2.NextIdAsync(testScope.IdScopeName); //4
+                var lastId = await generator1.NextIdAsync(testScope.IdScopeName); //7
 
                 // Assert
                 Assert.AreEqual(7, lastId);
@@ -109,29 +109,29 @@ namespace IntegrationTests.cs
         }
 
         [Test]
-        public void ShouldReturnIdsAcrossMultipleGenerators()
+        public async Task ShouldReturnIdsAcrossMultipleGenerators()
         {
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store1 = BuildStore(testScope);
+                var store1 = await BuildStoreAsync(testScope);
                 var generator1 = new UniqueIdGenerator(store1) { BatchSize = 3 };
-                var store2 = BuildStore(testScope);
+                var store2 = await BuildStoreAsync(testScope);
                 var generator2 = new UniqueIdGenerator(store2) { BatchSize = 3 };
 
                 // Act
                 var generatedIds = new[]
                 {
-                    generator1.NextId(testScope.IdScopeName), //1
-                    generator1.NextId(testScope.IdScopeName), //2
-                    generator1.NextId(testScope.IdScopeName), //3
-                    generator2.NextId(testScope.IdScopeName), //4
-                    generator1.NextId(testScope.IdScopeName), //7
-                    generator2.NextId(testScope.IdScopeName), //5
-                    generator2.NextId(testScope.IdScopeName), //6
-                    generator2.NextId(testScope.IdScopeName), //10
-                    generator1.NextId(testScope.IdScopeName), //8
-                    generator1.NextId(testScope.IdScopeName)  //9
+                    await generator1.NextIdAsync(testScope.IdScopeName), //1
+                    await generator1.NextIdAsync(testScope.IdScopeName), //2
+                    await generator1.NextIdAsync(testScope.IdScopeName), //3
+                    await generator2.NextIdAsync(testScope.IdScopeName), //4
+                    await generator1.NextIdAsync(testScope.IdScopeName), //7
+                    await generator2.NextIdAsync(testScope.IdScopeName), //5
+                    await generator2.NextIdAsync(testScope.IdScopeName), //6
+                    await generator2.NextIdAsync(testScope.IdScopeName), //10
+                    await generator1.NextIdAsync(testScope.IdScopeName), //8
+                    await generator1.NextIdAsync(testScope.IdScopeName)  //9
                 };
 
                 // Assert
@@ -141,13 +141,14 @@ namespace IntegrationTests.cs
             }
         }
 
-        [Test]
-        public void ShouldSupportUsingOneGeneratorFromMultipleThreads()
+        [Test, Parallelizable(ParallelScope.All)]
+        public async Task ShouldSupportUsingOneGeneratorFromMultipleThreads()
         {
+
             // Arrange
             using (var testScope = BuildTestScope())
             {
-                var store = BuildStore(testScope);
+                var store = await BuildStoreAsync(testScope);
                 var generator = new UniqueIdGenerator(store) { BatchSize = 1000 };
                 const int testLength = 10000;
 
@@ -155,15 +156,20 @@ namespace IntegrationTests.cs
                 var generatedIds = new ConcurrentQueue<long>();
                 var threadIds = new ConcurrentQueue<int>();
                 var scopeName = testScope.IdScopeName;
-                Parallel.For(
-                    0,
-                    testLength,
-                    new ParallelOptions { MaxDegreeOfParallelism = 10 },
-                    i =>
-                    {
-                        generatedIds.Enqueue(generator.NextId(scopeName));
-                        threadIds.Enqueue(Thread.CurrentThread.ManagedThreadId);
-                    });
+
+                var listToExecute = new List<int>();
+                for (int i = 0; i < testLength; i++)
+                {
+                    listToExecute.Add(i);
+                }
+
+                var tasks = listToExecute.ForEachAsync(10,async item =>
+                {
+                    var idToAdd = await generator.NextIdAsync(scopeName);
+                    generatedIds.Enqueue(idToAdd);
+                    threadIds.Enqueue(Thread.CurrentThread.ManagedThreadId);
+                });
+                await Task.WhenAll(tasks);
 
                 // Assert we generated the right count of ids
                 Assert.AreEqual(testLength, generatedIds.Count);
@@ -174,7 +180,7 @@ namespace IntegrationTests.cs
                 // Assert we used multiple threads
                 var uniqueThreadsUsed = threadIds.Distinct().Count();
                 if (uniqueThreadsUsed == 1)
-                    Assert.Inconclusive("The test failed to actually utilize multiple threads");
+                    Assert.Inconclusive("The test failed to actually utilize multiple threads. {0} uniqueThreadsUsed", uniqueThreadsUsed);
             }
         }
     }

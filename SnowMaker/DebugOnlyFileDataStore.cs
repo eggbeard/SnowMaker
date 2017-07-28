@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Threading.Tasks;
 
 namespace SnowMaker
 {
@@ -13,7 +14,7 @@ namespace SnowMaker
             this.directoryPath = directoryPath;
         }
 
-        public string GetData(string blockName)
+        public async Task<string> GetDataAsync(string blockName)
         {
             var blockPath = Path.Combine(directoryPath, string.Format("{0}.txt", blockName));
             try
@@ -25,13 +26,15 @@ namespace SnowMaker
                 using (var file = File.Create(blockPath))
                 using (var streamWriter = new StreamWriter(file))
                 {
-                    streamWriter.Write(SeedValue);
+                    await streamWriter.WriteAsync(SeedValue);
                 }
                 return SeedValue;
             }
         }
 
-        public bool TryOptimisticWrite(string blockName, string data)
+#pragma warning disable 1998
+        public async Task<bool> TryOptimisticWriteAsync(string blockName, string data)
+#pragma warning restore 1998
         {
             var blockPath = Path.Combine(directoryPath, string.Format("{0}.txt", blockName));
             File.WriteAllText(blockPath, data);

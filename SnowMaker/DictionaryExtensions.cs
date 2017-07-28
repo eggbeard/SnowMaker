@@ -1,30 +1,36 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SnowMaker
 {
-    internal static class DictionaryExtensions
+    public static class DictionaryExtensions
     {
-        internal static TValue GetValue<TKey, TValue>(
+        public static async Task<TValue> GetValueAsync<TKey, TValue>(
             this IDictionary<TKey, TValue> dictionary,
             TKey key,
-            object dictionaryLock,
-            Func<TValue> valueInitializer)
+            SemaphoreSlim dictionarySemaphoreSlim,
+            Func<Task<TValue>> valueInitializer)
         {
             TValue value;
             var found = dictionary.TryGetValue(key, out value);
             if (found) return value;
 
-            lock (dictionaryLock)
+            await dictionarySemaphoreSlim.WaitAsync();
+            try
             {
                 found = dictionary.TryGetValue(key, out value);
                 if (found) return value;
 
-                value = valueInitializer();
+                value = await valueInitializer();
 
                 dictionary.Add(key, value);
             }
-
+            finally
+            {
+                dictionarySemaphoreSlim.Release();
+            }
             return value;
         }
     }

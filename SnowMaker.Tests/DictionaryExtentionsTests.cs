@@ -1,14 +1,16 @@
 ﻿using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
+using Castle.Core.Internal;
 using NUnit.Framework;
 
-namespace SnowMaker.UnitTests
+namespace SnowMaker.Tests
 {
     [TestFixture]
     public class DictionaryExtentionsTests
     {
         [Test]
-        public void GetValueShouldReturnExistingValueWithoutUsingTheLock()
+        public async Task GetValueShouldReturnExistingValueWithoutUsingTheLock()
         {
             var dictionary = new Dictionary<string, string>
             {
@@ -17,70 +19,69 @@ namespace SnowMaker.UnitTests
 
             // Act
             // null can't be used as a lock and will throw an exception if attempted
-            var value = dictionary.GetValue("foo", null, null);
+            var value = await dictionary.GetValueAsync("foo", null, null);
 
             // Assert
             Assert.AreEqual("bar", value);
         }
 
         [Test]
-        public void GetValueShouldCallTheValueInitializerWithinTheLockIfTheKeyDoesntExist()
+        public async Task GetValueShouldCallTheValueInitializerWithinTheLockIfTheKeyDoesntExist()
         {
             var dictionary = new Dictionary<string, string>
             {
                 { "foo", "bar" }
             };
 
-            var dictionaryLock = new object();
+            var dictionarySemaphoreSlim = new SemaphoreSlim(1,1);
+
 
             // Act
-            dictionary.GetValue(
+            var ignoreValue = await dictionary.GetValueAsync(
                 "bar",
-                dictionaryLock,
-                () =>
+                dictionarySemaphoreSlim,
+#pragma warning disable 1998
+                async () =>
+#pragma warning restore 1998
                 {
                     // Assert
-                    Assert.IsTrue(IsLockedOnCurrentThread(dictionaryLock));
+                    Assert.IsTrue(dictionarySemaphoreSlim.CurrentCount == 0);
                     return "qak";
                 });
         }
 
         [Test]
-        public void GetValueShouldStoreNewValuesAfterCallingTheValueInitializerOnce()
+        public async Task GetValueShouldStoreNewValuesAfterCallingTheValueInitializerOnce()
         {
             var dictionary = new Dictionary<string, string>
             {
                 { "foo", "bar" }
             };
 
-            var dictionaryLock = new object();
+            var dictionarySemaphoreSlim = new SemaphoreSlim(1, 1);
 
             // Arrange
-            dictionary.GetValue("bar", dictionaryLock, () => "qak");
+#pragma warning disable 1998
+            var value = await dictionary.GetValueAsync("bar", dictionarySemaphoreSlim, async () => { return "qak"; });
+#pragma warning restore 1998
 
             // Act
-            dictionary.GetValue(
-                "bar",
-                dictionaryLock,
-                () =>
-                {
-                    // Assert
-                    Assert.Fail("Value initializer should not have been called a second time.");
-                    return null;
-                });
+            if (!value.IsNullOrEmpty())
+            {
+                var value2 = await dictionary.GetValueAsync(
+                    "bar",
+                    dictionarySemaphoreSlim,
+#pragma warning disable 1998
+                    async () =>
+#pragma warning restore 1998
+                    {
+                        // Assert
+                        Assert.Fail("Value initializer should not have been called a second time.");
+                        return null;
+                    });
+            }
         }
 
-        static bool IsLockedOnCurrentThread(object lockObject)
-        {
-            var reset = new ManualResetEvent(false);
-            var couldLockBeAcquiredOnOtherThread = false;
-            new Thread(() =>
-            {
-                couldLockBeAcquiredOnOtherThread = Monitor.TryEnter(lockObject, 0);
-                reset.Set();
-            }).Start();
-            reset.WaitOne();
-            return !couldLockBeAcquiredOnOtherThread;
-        }
+
     }
 }

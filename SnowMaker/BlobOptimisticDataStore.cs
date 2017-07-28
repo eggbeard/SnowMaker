@@ -4,6 +4,8 @@ using System.Text;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SnowMaker
 {
@@ -14,36 +16,45 @@ namespace SnowMaker
         readonly CloudBlobContainer blobContainer;
 
         readonly IDictionary<string, ICloudBlob> blobReferences;
-        readonly object blobReferencesLock = new object();
+        readonly SemaphoreSlim blobReferencesSemaphore = new SemaphoreSlim(1,1);
 
-        public BlobOptimisticDataStore(CloudStorageAccount account, string containerName)
+        private BlobOptimisticDataStore(CloudStorageAccount account, string containerName)
         {
             var blobClient = account.CreateCloudBlobClient();
             blobContainer = blobClient.GetContainerReference(containerName.ToLower());
-            blobContainer.CreateIfNotExists();
+            //await blobContainer.CreateIfNotExistsAsync();//can't do this in the constructor, hence the create version below
 
             blobReferences = new Dictionary<string, ICloudBlob>();
         }
 
-        public string GetData(string blockName)
+        public static Task<BlobOptimisticDataStore> CreateAsync(CloudStorageAccount account, string containerName)
         {
-            var blobReference = GetBlobReference(blockName);
+            var ret = new BlobOptimisticDataStore(account, containerName);
+            return ret.InitializeAsync();
+        }
+
+        private async Task<BlobOptimisticDataStore> InitializeAsync()
+        {
+            await blobContainer.CreateIfNotExistsAsync();
+            return this;
+        }
+
+        public async Task<string> GetDataAsync(string blockName)
+        {
+            var blobReference = await GetBlobReferenceAsync(blockName);
             using (var stream = new MemoryStream())
             {
-                blobReference.DownloadToStream(stream);
+                await blobReference.DownloadToStreamAsync(stream);
                 return Encoding.UTF8.GetString(stream.ToArray());
             }
         }
 
-        public bool TryOptimisticWrite(string scopeName, string data)
+        public async Task<bool> TryOptimisticWriteAsync(string scopeName, string data)
         {
-            var blobReference = GetBlobReference(scopeName);
+            var blobReference = await GetBlobReferenceAsync(scopeName);
             try
             {
-                UploadText(
-                    blobReference,
-                    data,
-                    AccessCondition.GenerateIfMatchCondition(blobReference.Properties.ETag));
+                await UploadTextAsync(blobReference,data);
             }
             catch (StorageException exc)
             {
@@ -55,24 +66,24 @@ namespace SnowMaker
             return true;
         }
 
-        ICloudBlob GetBlobReference(string blockName)
+        async Task<ICloudBlob> GetBlobReferenceAsync(string blockName)
         {
-            return blobReferences.GetValue(
+            return await blobReferences.GetValueAsync(
                 blockName,
-                blobReferencesLock,
+                blobReferencesSemaphore,
                 () => InitializeBlobReference(blockName));
         }
 
-        private ICloudBlob InitializeBlobReference(string blockName)
+        private async Task<ICloudBlob> InitializeBlobReference(string blockName)
         {
             var blobReference = blobContainer.GetBlockBlobReference(blockName);
-
-            if (blobReference.Exists())
+            var exists = await blobReference.ExistsAsync();
+            if (exists)
                 return blobReference;
 
             try
             {
-                UploadText(blobReference, SeedValue, AccessCondition.GenerateIfNoneMatchCondition("*"));
+                await UploadTextAsync(blobReference, SeedValue);
             }
             catch (StorageException uploadException)
             {
@@ -83,13 +94,13 @@ namespace SnowMaker
             return blobReference;
         }
 
-        void UploadText(ICloudBlob blob, string text, AccessCondition accessCondition)
+        private async Task UploadTextAsync(ICloudBlob blob, string text)
         {
             blob.Properties.ContentEncoding = "UTF-8";
             blob.Properties.ContentType = "text/plain";
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(text)))
             {
-                blob.UploadFromStream(stream, accessCondition);
+                await blob.UploadFromStreamAsync(stream);
             }
         }
     }

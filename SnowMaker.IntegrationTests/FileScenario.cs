@@ -1,19 +1,21 @@
 ﻿using System;
 using System.IO;
+using System.Threading.Tasks;
 using NUnit.Framework;
-using SnowMaker;
 
-namespace IntegrationTests.cs
+namespace SnowMaker.IntegrationTests
 {
     [TestFixture]
-    public class File : Scenarios<File.TestScope>
+    public class FileScenario : Scenarios<FileScenario.TestScope>
     {
         protected override TestScope BuildTestScope()
         {
             return new TestScope();
         }
 
-        protected override IOptimisticDataStore BuildStore(TestScope scope)
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        protected override async Task<IOptimisticDataStore> BuildStoreAsync(TestScope scope)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
         {
             return new DebugOnlyFileDataStore(scope.DirectoryPath);
         }
@@ -32,10 +34,10 @@ namespace IntegrationTests.cs
             public string IdScopeName { get; private set; }
             public string DirectoryPath { get; private set; }
 
-            public string ReadCurrentPersistedValue()
+            public async Task<string> ReadCurrentPersistedValueAsync()
             {
                 var filePath = Path.Combine(DirectoryPath, string.Format("{0}.txt", IdScopeName));
-                return System.IO.File.ReadAllText(filePath);
+                return await FileAsyncReaderHelper.ReadAllTextAsync(filePath);
             }
 
             public void Dispose()

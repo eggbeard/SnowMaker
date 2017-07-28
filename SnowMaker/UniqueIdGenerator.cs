@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace SnowMaker
 {
@@ -10,7 +11,7 @@ namespace SnowMaker
         readonly IOptimisticDataStore optimisticDataStore;
 
         readonly IDictionary<string, ScopeState> states = new Dictionary<string, ScopeState>();
-        readonly object statesLock = new object();
+        readonly SemaphoreSlim statesSemaphore = new SemaphoreSlim(1,1);
 
         int batchSize = 100;
         int maxWriteAttempts = 25;
@@ -38,37 +39,44 @@ namespace SnowMaker
             }
         }
 
-        public long NextId(string scopeName)
+        public async Task<long> NextIdAsync(string scopeName)
         {
-            var state = GetScopeState(scopeName);
-
-            lock (state.IdGenerationLock)
+            var state = await GetScopeStateAsync(scopeName);
+            await state.IdGenerationSemaphore.WaitAsync();
+            try
             {
                 if (state.LastId == state.HighestIdAvailableInBatch)
-                    UpdateFromSyncStore(scopeName, state);
+                {
+                    await UpdateFromSyncStoreAsync(scopeName, state);
+                }
 
                 return Interlocked.Increment(ref state.LastId);
             }
+            finally
+            {
+                state.IdGenerationSemaphore.Release();
+            }
         }
 
-        ScopeState GetScopeState(string scopeName)
+        async Task<ScopeState> GetScopeStateAsync(string scopeName)
         {
-            return states.GetValue(
+            return await states.GetValueAsync(
                 scopeName,
-                statesLock,
-                () => new ScopeState());
+                statesSemaphore,
+#pragma warning disable 1998
+                async() =>  { return new ScopeState(); });
+#pragma warning restore 1998
         }
 
-        void UpdateFromSyncStore(string scopeName, ScopeState state)
+        async Task UpdateFromSyncStoreAsync(string scopeName, ScopeState state)
         {
             var writesAttempted = 0;
 
             while (writesAttempted < maxWriteAttempts)
             {
-                var data = optimisticDataStore.GetData(scopeName);
+                var data = await optimisticDataStore.GetDataAsync(scopeName);
 
-                long nextId;
-                if (!long.TryParse(data, out nextId))
+                if (!long.TryParse(data, out long nextId))
                     throw new UniqueIdGenerationException(string.Format(
                        "The id seed returned from storage for scope '{0}' was corrupt, and could not be parsed as a long. The data returned was: {1}",
                        scopeName,
@@ -78,7 +86,8 @@ namespace SnowMaker
                 state.HighestIdAvailableInBatch = nextId - 1 + batchSize;
                 var firstIdInNextBatch = state.HighestIdAvailableInBatch + 1;
 
-                if (optimisticDataStore.TryOptimisticWrite(scopeName, firstIdInNextBatch.ToString(CultureInfo.InvariantCulture)))
+                var written = await optimisticDataStore.TryOptimisticWriteAsync(scopeName, firstIdInNextBatch.ToString(CultureInfo.InvariantCulture));
+                if (written)
                     return;
 
                 writesAttempted++;

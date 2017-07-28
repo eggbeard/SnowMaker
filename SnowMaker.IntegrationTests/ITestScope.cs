@@ -1,10 +1,11 @@
 using System;
+using System.Threading.Tasks;
 
-namespace IntegrationTests.cs
+namespace SnowMaker.IntegrationTests
 {
     public interface ITestScope : IDisposable
     {
         string IdScopeName { get; }
-        string ReadCurrentPersistedValue();
+        Task<string> ReadCurrentPersistedValueAsync();
     }
 }
