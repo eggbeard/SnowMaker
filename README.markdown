@@ -12,7 +12,9 @@ This version is available on NuGet as SnowMakerCore: [http://nuget.org/List/Pack
 Usage should be something like this (different to the original usage):
 ```csharp     
      var cloudStorageAccount = CloudStorageAccount.Parse(storageConnectionString);
-     var cloudyKeyGenerator = await AzureSnowMakerKeyGenerator.CreateAsync(cloudStorageAccount);
+     const string containerName = "snowmakerKeys";
+     var dataStore = await BlobOptimisticDataStore.CreateAsync(cloudStorageAccount, containerName);
+     var cloudyKeyGenerator = new UniqueIdGenerator(dataStore);
      var orderNumber = await cloudyKeyGenerator.NextIdAsync("orderNumbers");
 ```
 
