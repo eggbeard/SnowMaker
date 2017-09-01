@@ -1,11 +1,11 @@
-# SnowMakerCore (.net Core version)
+# SnowMakerCore (.NET Core / .NET Standard version)
 Originally created by [Tatham Oddie](https://github.com/tathamoddie) as [SnowMaker](https://github.com/tathamoddie/SnowMaker)
 
 A high performance, distributed unique id generator for Azure environments.
 
 Ids are longs, not ugly GUIDs.
 
-This version updated by Chris Adol to use netcore1.1 and async.
+This version updated by Chris Adol to use netcore2.0 / netstandard2.0 and async.
 
 This version is available on NuGet as SnowMakerCore: [http://nuget.org/List/Packages/SnowMakerCore](http://nuget.org/List/Packages/SnowMakerCore)
 
